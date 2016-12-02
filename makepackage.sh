@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 #制作脚本版本
 MP_VERSION=1.0.0.0
 #HEADER脚本行数
@@ -10,10 +10,10 @@ FILENAME=""
 #目标包名称
 TARNAME=""
 #校验程序名称
-CHECKNAME="$(dirname $0)/Check"
+CHECKNAME="Check"
 
 #临时文件路径
-TEMPFILE="${TMPDIR:=/tmp}/mkpackage$$"
+TEMPFILE="$(dirname $0)/Temp$$"
 #许可协议
 LICENSE=""
 #文件大小，多个中间用空格隔开
@@ -98,20 +98,27 @@ if test -f "$HEADER"; then
         OLDTARNAME="$TARNAME"
         TARNAME="$TEMPFILE"
 	SKIP=0
-       . "$HEADER"
+       	. "$HEADER"
         SKIP=`cat "$TEMPFILE" |wc -l`
-	# Get rid of any spaces
-	SKIP=`expr $SKIP`
 	rm -f "$TEMPFILE"
     	echo "Header 文件 $SKIP 行" >&2
         TARNAME="$OLDTARNAME"
 else
-    echo "打开 header 文件失败: $HEADER" >&2
-    exit 1
+    	echo "打开 header 文件失败: $HEADER" >&2
+    	exit 1
 fi
+
 #
 if test -f "$TARNAME"; then
-    echo "WARNING: 覆盖已存在包: $TARNAME" >&2
+	echo "$TARNAME 包已存在是否覆盖？y/n "
+      	read yn
+     	if test x"$yn" = xn; then
+        	exit 1
+        	break;
+     	elif test x"$yn" = xy; then
+        	break;
+      	fi
+   	echo "WARNING: 覆盖已存在包: $TARNAME" >&2
 fi
 
 MD5_CODE=00000000000000000000000000000000
@@ -144,6 +151,7 @@ MD5S="$MD5S $MD5_CODE"
 
 #生成HEADER脚本
 . "$HEADER"
+#复制一份方便查看问题
 cp $TARNAME Temp.sh
 #连接文件
 cat "$CHECKNAME" >> "$TARNAME"
