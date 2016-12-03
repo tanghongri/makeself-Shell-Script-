@@ -1,5 +1,5 @@
 cat << EOF  > "$TARNAME"
-#!/bin/sh -x
+#!/bin/sh
 # 脚本制作程序版本： $MP_VERSION
 
 #md5值
@@ -9,14 +9,17 @@ FILESIZES="$FILESIZES"
 #许可协议
 licensetxt="$LICENSE"
 #缓存文件夹
-TEMPDIR="Temp\$\$"
+TEMPDIR="\$(dirname \$0)/Temp\$\$"
 #校验程序名称
 CHECKNAME="$CHECKNAME"
+#安装脚本名称
+INSTALLNAME="$INSTALLNAME"
 #md5sum路径
 MD5_PATH=""
 #HEADER脚本大小
 SKIP=0
-
+#退出清理
+OUTCLEAN=true
 #许可协议
 PrintLicense()
 {
@@ -68,9 +71,9 @@ dd_Progress()
                 		if test \$pcent -lt 100; then
                     			printf "\b\b\b\b\b\b\b" 1>&2
                     			if test \$pcent -lt 10; then
-                        			printf "    \$pcent%% " 1>&2
+                        			printf "    \$pcent%% \n" 1>&2
                     			else
-                        			printf "   \$pcent%% " 1>&2
+                        			printf "   \$pcent%% \n" 1>&2
                    	 		fi
                 		fi
                 		pos=\`expr \$pos \+ \$bsize\`
@@ -80,38 +83,42 @@ dd_Progress()
             		dd bs=\$bytes count=1 2>/dev/null
         	fi
         	printf "\b\b\b\b\b\b\b" 1>&2
-        	printf " 100%%  " 1>&2
+        	printf " 100%%  \n" 1>&2
     	) < "\$file"
 }
 #检查文件
 Check()
 {
-    printf "开始校验MD5..."
-    OFFSET=\$2
-    Index=1
-    for s in \$FILESIZES
-    do	
+    	printf "开始校验MD5......\\n"
+    	OFFSET=\$2
+    	Index=1
+    	for filesize in \$FILESIZES
+    	do	
 		
-                        md5=\`echo \$MD5S | cut -d" " -f\$Index\`
-			if test x"\$md5" = x00000000000000000000000000000000; then
-				echo " \$1 无MD5校验信息." >&2
+        	md5=\`echo \$MD5S | cut -d" " -f\$Index\`
+		if test x"\$md5" = x00000000000000000000000000000000; then
+			echo " \$1 无MD5校验信息." >&2
+		else
+			md5sum=\`dd_Progress "\$1" \$OFFSET \$filesize | eval "\$MD5_PATH \$MD5_ARG" | cut -b-32\`;
+			if test x"\$md5sum" != x"\$md5" 
+			then
+				echo "MD5 校验失败: \$s \$sum  与 \$md5 不同" >&2
+				eval \$OUTCLEAN;exit 2
 			else
-				md5sum=\`dd_Progress "\$1" \$OFFSET \$s | eval "\$MD5_PATH \$MD5_ARG" | cut -b-32\`;
-				if test x"\$md5sum" != x"\$md5" 
-				then
-					echo "MD5 校验失败: \$s \$sum  与 \$md5 不同" >&2
-					exit 2
-				else
-					printf "\$s MD5 校验成功." >&2
-				fi
+				printf "文件\$Index MD5 校验成功.\\n" >&2
 			fi
-		
+		fi
 		
 		Index=\`expr \$Index + 1\`
-		OFFSET=\`expr \$OFFSET + \$s\`
-    done
-
-    echo "所有文件MD5校验成功."  
+		OFFSET=\`expr \$OFFSET + \$filesize\`
+    	done
+    
+    	if test \$Index -ne 3
+	then
+		printf "文件数量错误\n" 1>&2
+		eval \$OUTCLEAN;exit 3
+	fi 
+    	echo "所有文件MD5校验成功."  
 }
 
 #命令开始
@@ -121,15 +128,20 @@ PrintLicense
 
 mkdir \$TEMPDIR || {
     	echo '创建临时文件夹失败： \$tmpdir >&2' 
-    	exit 1
+    	exit 4
 }
+OUTCLEAN="\$OUTCLEAN ;/bin/rm -rf \$TEMPDIR"
+
+
 #检查md5环境
 #查找md5sum
 MD5_PATH=`exec <&- 2>&-; which md5sum || command -v md5sum || type md5sum`
 if test ! -x "$MD5_PATH"; then  		
     	echo "MD5: 未找到 md5sum 命令"
-	exit 1		
+	eval \$OUTCLEAN;exit 5		
 fi
+#
+trap "echo "捕捉到信号，退出清理！" >&2; eval \$OUTCLEAN; exit 15" 1 2 3 15
 #HEADER脚本大小
 SKIP=\`head -n $SKIP "\$0" | wc -c | tr -d " "\`
 #校验md5
@@ -139,25 +151,36 @@ Check "\$0" "\$SKIP"
 leftspace=\`diskspace \$TEMPDIR\`
 if test -n "\$leftspace"; then
     	if test "\$leftspace" -lt $USIZES; then
-        	echo
         	echo "目录没有足够的空间可用： "\`dirname \$TEMPDIR\`" (\$leftspace KB)来释放 \$0 ($USIZES KB)" >&2
-		exit 1
+		eval \$OUTCLEAN;exit 6
     	fi
 fi
 #分割文件
 Index=1
 OFFSET=\$SKIP
-for s in \$FILESIZES
-do
-    	dd_Progress "\$0" \$OFFSET \$s > "\$TEMPDIR/\$Index"
-	chmod +x "\$TEMPDIR/\$Index"
-       
-    	OFFSET=\`expr \$OFFSET + \$s\`
-	Index=\`expr \$Index + 1\`
 
+for filesize in \$FILESIZES	
+do
+	if test \$Index -eq 1
+	then	 	
+		printf "释放授权程序......\n" 1>&2
+	 	dd_Progress "\$0" \$OFFSET \$filesize > "\$TEMPDIR/\$Index"
+		chmod +x "\$TEMPDIR/\$Index"
+		\$TEMPDIR/\$Index
+		if test \$? -ne 0
+		then
+			echo "授权失败，退出安装程序！"
+			eval \$OUTCLEAN;exit 7
+		fi
+	elif test \$Index -eq 2
+	then
+		printf "释放安装程序......\n" 1>&2
+		dd_Progress "\$0" \$OFFSET \$filesize | tar -zxvf - -C"./\$TEMPDIR/"
+	fi 
+	
+	Index=\`expr \$Index + 1\`
+	OFFSET=\`expr \$OFFSET + \$filesize\`
 done
 
-cd ".."
-#/bin/rm -rf \$TEMPDIR
-exit 0
+eval \$OUTCLEAN;exit 0
 EOF

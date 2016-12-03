@@ -4,14 +4,15 @@ MP_VERSION=1.0.0.0
 #HEADER脚本行数
 SKIP=0
 #解包脚本位置
-HEADER=`dirname "$0"`/header.sh
+HEADER="$(dirname $0)/header.sh"
 #安装包文件名称
 FILENAME=""
 #目标包名称
 TARNAME=""
 #校验程序名称
 CHECKNAME="Check"
-
+#安装脚本名称
+INSTALLNAME="Install.sh"
 #临时文件路径
 TEMPFILE="$(dirname $0)/Temp$$"
 #许可协议
@@ -44,7 +45,7 @@ do
         	;;
     	--license|-l)
 		LICENSE=$(cat $2)
-        	if ! shift 2; then Help; exit 1; fi
+        	if ! shift 2; then Help; exit 2; fi
         	;;
     	-*)
 		echo "未知参数 : $1"
@@ -66,7 +67,7 @@ then
 	FILENAME="$1"
 else
 	echo "文件 $1 不存在." >&2
-	exit 1
+	exit 3
 fi
 #目标包名称
 TARNAME=$2
@@ -84,13 +85,13 @@ fi
 if test ! -f "$CHECKNAME"
 then
     	echo "校验程序 $CHECKNAME 不存在." >&2
-   	exit 1
+   	exit 4
 fi
 #查找md5sum
 MD5_PATH=`exec <&- 2>&-; which md5sum || command -v md5sum || type md5sum`
 if test ! -x "$MD5_PATH"; then  		
     	echo "MD5: 未找到 md5sum 命令"
-	exit 1		
+	exit 5		
 fi
 
 #计算HEADER脚本行数
@@ -105,7 +106,7 @@ if test -f "$HEADER"; then
         TARNAME="$OLDTARNAME"
 else
     	echo "打开 header 文件失败: $HEADER" >&2
-    	exit 1
+    	exit 6
 fi
 
 #
@@ -113,7 +114,7 @@ if test -f "$TARNAME"; then
 	echo "$TARNAME 包已存在是否覆盖？y/n "
       	read yn
      	if test x"$yn" = xn; then
-        	exit 1
+        	exit 7
         	break;
      	elif test x"$yn" = xy; then
         	break;
@@ -152,7 +153,7 @@ MD5S="$MD5S $MD5_CODE"
 #生成HEADER脚本
 . "$HEADER"
 #复制一份方便查看问题
-cp $TARNAME Temp.sh
+#cp $TARNAME Temp.sh
 #连接文件
 cat "$CHECKNAME" >> "$TARNAME"
 cat "$FILENAME" >> "$TARNAME"
