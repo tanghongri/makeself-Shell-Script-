@@ -1,5 +1,5 @@
 cat << EOF  > "$TARNAME"
-#!/bin/sh
+#!/bin/sh -x
 # 脚本制作程序版本： $MP_VERSION
 
 #md5值
@@ -164,10 +164,10 @@ do
 	if test \$Index -eq 1
 	then	 	
 		printf "释放授权程序......\n" 1>&2
-	 	dd_Progress "\$0" \$OFFSET \$filesize > "\$TEMPDIR/\$Index"
-		chmod +x "\$TEMPDIR/\$Index"
-		\$TEMPDIR/\$Index
-		if test \$? -ne 0
+	 	dd_Progress "\$0" \$OFFSET \$filesize > "\$TEMPDIR/\$CHECKNAME"
+		chmod +x "\$TEMPDIR/\$CHECKNAME"
+		\$TEMPDIR/\$CHECKNAME
+		if test "\$?" -ne 0
 		then
 			echo "授权失败，退出安装程序！"
 			eval \$OUTCLEAN;exit 7
@@ -175,12 +175,23 @@ do
 	elif test \$Index -eq 2
 	then
 		printf "释放安装程序......\n" 1>&2
-		dd_Progress "\$0" \$OFFSET \$filesize | tar -zxvf - -C"./\$TEMPDIR/"
+		dd_Progress "\$0" \$OFFSET \$filesize | eval "$GUNZIP_CMD" | ( cd "\$TEMPDIR";tar xpvf - 2>&1) 1>/dev/null
+#修改用户组
+#		(cd "\$tmpdir"; chown -R \`id -u\` .;  chgrp -R \`id -g\` .)
 	fi 
 	
 	Index=\`expr \$Index + 1\`
 	OFFSET=\`expr \$OFFSET + \$filesize\`
 done
-
-eval \$OUTCLEAN;exit 0
+#执行安装脚本
+if test x"\$INSTALLNAME" != x
+then   
+	eval "\"\$TEMPDIR/\$INSTALLNAME\" \"\$@\"";res=\$?;
+    	if test "\$res" -ne 0 
+	then
+		echo "安装脚本 '\$TEMPDIR/\$INSTALLNAME' 返回错误代码 (\$res)" >&2
+    	fi
+fi
+eval \$OUTCLEAN;
+exit 0
 EOF

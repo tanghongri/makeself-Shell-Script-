@@ -12,7 +12,7 @@ TARNAME=""
 #校验程序名称
 CHECKNAME="Check"
 #安装脚本名称
-INSTALLNAME="Install.sh"
+INSTALLNAME="install.sh"
 #临时文件路径
 TEMPFILE="$(dirname $0)/Temp$$"
 #许可协议
@@ -23,6 +23,12 @@ FILESIZES=""
 USIZES=""
 #md5列表，多个中间用空格隔开
 MD5S=""
+#压缩等级
+COMPRESS_LEVEL=9
+#压缩和解压缩命令
+GZIP_CMD="gzip -c$COMPRESS_LEVEL"
+GUNZIP_CMD="gzip -cd"
+TAR_ARGS="cvf"
 
 ###################帮助信息###################
 Help()
@@ -32,6 +38,7 @@ Help()
     	echo "可选参数可以下列参数组合:"
     	echo "    --help | -h        : 帮助信息"
     	echo "    --license|-l       : 软件许可协议(默认LICENSE.txt)"
+	echo "    --install|-i       : 安装脚本名称(install.sh)"
     	echo "Do not forget to give a fully qualified startup script name"
     	echo "(i.e. with a ./ prefix if inside the archive)."
     	exit 1
@@ -45,6 +52,10 @@ do
         	;;
     	--license|-l)
 		LICENSE=$(cat $2)
+        	if ! shift 2; then Help; exit 2; fi
+        	;;
+	--license|-i)
+		INSTALLNAME=$(cat $2)
         	if ! shift 2; then Help; exit 2; fi
         	;;
     	-*)
@@ -62,13 +73,14 @@ then
 	Help	
 fi
 #安装包名称
-if test -f "$1"
+if test -d "$1"
 then
 	FILENAME="$1"
 else
-	echo "文件 $1 不存在." >&2
+	echo "Error: 文件夹 $1 不存在." >&2
 	exit 3
 fi
+
 #目标包名称
 TARNAME=$2
 #LICENSE
@@ -131,6 +143,7 @@ USIZES=$USIZE
 #计算文件大小
 FSIZE=`cat "$CHECKNAME" | wc -c | tr -d " "`
 FILESIZES=$FSIZE;
+echo "校验文件$CHECKNAME $USIZE KB"
 
 #计算md5
 MD5_CODE=`cat "$CHECKNAME" | eval "$MD5_PATH" | cut -b-32`
@@ -140,12 +153,18 @@ MD5S=$MD5_CODE
 #空间
 USIZE=`du -ks "$FILENAME" | awk '{print $1}'`
 USIZES=`expr $USIZES + $USIZE`
+echo "安装文件 $FILENAME $USIZE KB"
+echo "开始压缩文件 $FILENAME..."
+exec 3<> "$TEMPFILE"
+(cd "$FILENAME" && ( tar -$TAR_ARGS - . | eval "$GZIP_CMD" >&3 ) ) || { echo Aborting: 安装文件目录未找到或无法创建临时文件: "$TEMPFILE"; exec 3>&-; rm -f "$TEMPFILE"; exit 1; }
+exec 3>&- # try to close the archive
 
+echo $(pwd)
 #计算文件大小
-FSIZE=`cat "$FILENAME" | wc -c | tr -d " "`
+FSIZE=`cat "$TEMPFILE" | wc -c | tr -d " "`
 FILESIZES="$FILESIZES $FSIZE"
 #计算md5
-MD5_CODE=`cat "$FILENAME" | eval "$MD5_PATH" | cut -b-32`
+MD5_CODE=`cat "$TEMPFILE" | eval "$MD5_PATH" | cut -b-32`
 echo "$FILENAME MD5: $MD5_CODE"
 MD5S="$MD5S $MD5_CODE"
 
@@ -155,11 +174,13 @@ MD5S="$MD5S $MD5_CODE"
 #复制一份方便查看问题
 #cp $TARNAME Temp.sh
 #连接文件
+echo "复制 $CHECKNAME..."
 cat "$CHECKNAME" >> "$TARNAME"
-cat "$FILENAME" >> "$TARNAME"
+echo "复制 $FILENAME..."
+cat "$TEMPFILE" >> "$TARNAME"
 
 chmod +x "$TARNAME"
-
+rm -f "$TEMPFILE"
 echo "安装包： \"$TARNAME\" 制作成功."
 
 
